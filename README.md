@@ -1,6 +1,18 @@
-# Mappy: AnchorWave Alignment Helper
+# Mappy: 
 
-This repository contains two maize reference FASTA files and a helper script to run pairwise whole-genome alignment with [AnchorWave](https://github.com/baoxingsong/AnchorWave).
+## Clone With Submodule
+
+Clone this repository and initialize `AnchorWave/` in one step:
+
+```bash
+git clone --recurse-submodules <repo-url>
+```
+
+If you already cloned without submodules:
+
+```bash
+git submodule update --init --recursive
+```
 
 ## Files
 
