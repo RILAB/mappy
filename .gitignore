@@ -1,3 +1,9 @@
+*.fa
+*.fa.gz
+*.bak
+*.gff3
+*.gff3.gz
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

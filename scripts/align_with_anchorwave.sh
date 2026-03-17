@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 usage() {
   cat <<'EOF'
@@ -25,6 +27,9 @@ Notes:
     in the current directory matching:
       *.fa, *.fasta, *.fna, *.fa.gz, *.fasta.gz, *.fna.gz
   - Compressed FASTA inputs are decompressed into a temporary directory in /tmp.
+  - AnchorWave is resolved in this order:
+      1) anchorwave on PATH
+      2) local binary under ./AnchorWave (submodule checkout/build output)
 EOF
 }
 
@@ -42,6 +47,40 @@ realpath_safe() {
   else
     python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$p"
   fi
+}
+
+resolve_anchorwave_bin() {
+  if command -v anchorwave >/dev/null 2>&1; then
+    command -v anchorwave
+    return 0
+  fi
+
+  local candidates=(
+    "$REPO_ROOT/AnchorWave/anchorwave"
+    "$REPO_ROOT/AnchorWave/anchorwave_sse4.1"
+    "$REPO_ROOT/AnchorWave/anchorwave_avx2"
+    "$REPO_ROOT/AnchorWave/anchorwave_avx512"
+    "$REPO_ROOT/AnchorWave/anchorwave_sse2"
+    "$REPO_ROOT/AnchorWave/anchorwave_arm"
+    "$REPO_ROOT/AnchorWave/build/anchorwave"
+    "$REPO_ROOT/AnchorWave/build/anchorwave_sse4.1"
+    "$REPO_ROOT/AnchorWave/build/anchorwave_avx2"
+    "$REPO_ROOT/AnchorWave/build/anchorwave_avx512"
+    "$REPO_ROOT/AnchorWave/build/anchorwave_sse2"
+    "$REPO_ROOT/AnchorWave/build/anchorwave_arm"
+  )
+  local c=""
+  for c in "${candidates[@]}"; do
+    if [[ -x "$c" ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+
+  echo "ERROR: Required command not found: anchorwave" >&2
+  echo "Searched PATH and local candidates under $REPO_ROOT/AnchorWave." >&2
+  echo "Build AnchorWave first, e.g.: (cd AnchorWave && cmake ./ && make -j)" >&2
+  return 1
 }
 
 prepare_fasta() {
@@ -166,9 +205,9 @@ if [[ ! -f "$query" ]]; then
   exit 1
 fi
 
-require_cmd anchorwave
 require_cmd minimap2
 require_cmd gunzip
+anchorwave_bin="$(resolve_anchorwave_bin)"
 
 mkdir -p "$outdir"
 
@@ -194,9 +233,10 @@ echo "Query FASTA:     $query_fasta"
 echo "GFF/GTF:         $gff_abs"
 echo "Mode:            $mode"
 echo "Output dir:      $outdir_abs"
+echo "AnchorWave:      $anchorwave_bin"
 
 echo "[1/4] Extracting CDS with anchorwave gff2seq"
-anchorwave gff2seq -i "$gff_abs" -r "$ref_fasta" -o "$cds_fa"
+"$anchorwave_bin" gff2seq -i "$gff_abs" -r "$ref_fasta" -o "$cds_fa"
 
 echo "[2/4] Lifting CDS to reference with minimap2"
 minimap2 -x splice -t "$threads" -k 12 -a -p 0.4 -N 20 "$ref_fasta" "$cds_fa" > "$ref_sam"
@@ -206,7 +246,7 @@ minimap2 -x splice -t "$threads" -k 12 -a -p 0.4 -N 20 "$query_fasta" "$cds_fa" 
 
 echo "[4/4] Running AnchorWave $mode"
 if [[ "$mode" == "proali" ]]; then
-  anchorwave proali \
+  "$anchorwave_bin" proali \
     -i "$gff_abs" \
     -as "$cds_fa" \
     -r "$ref_fasta" \
@@ -224,7 +264,7 @@ else
   if [[ "$use_iv" -eq 1 ]]; then
     iv_flag=(-IV)
   fi
-  anchorwave genoAli \
+  "$anchorwave_bin" genoAli \
     -i "$gff_abs" \
     -as "$cds_fa" \
     -r "$ref_fasta" \

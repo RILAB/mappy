@@ -14,13 +14,28 @@ If you already cloned without submodules:
 git submodule update --init --recursive
 ```
 
+## Build AnchorWave (submodule)
+
+Build the `AnchorWave` binary from the included submodule:
+
+```bash
+cd AnchorWave
+cmake ./
+make -j
+cd ..
+```
+
+The alignment script will use `anchorwave` from your `PATH` if available, or fall back to the local binary under `AnchorWave/`.
+
 ## Files
 
 v2 and v5 maize genome files, from [maizegdb](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/):
 
 - `v2.fa.gz`
 - `v5.fa.gz`
-- `v2.gff.gz`
+
+You also need a **reference annotation file** (`.gff3` or `.gtf`) matching the reference genome used with `--ref`.
+
 - `v5.gff.gz`
 
 Scripts:
@@ -29,12 +44,7 @@ Scripts:
 
 ## Requirements
 
-Run `module load minimap2`
-Install and make available on `PATH`:
-
-- `anchorwave`
-
-You also need a **reference annotation file** (`.gff3` or `.gtf`) matching the reference genome used with `--ref`.
+Run `module load minimap2` (or install `minimap2` so it is available on `PATH`).
 
 ## Quick Start
 
@@ -49,10 +59,15 @@ scripts/align_with_anchorwave.sh \
   --outdir anchorwave_out
 ```
 
-Or let the script auto-detect exactly two FASTA files in the current directory:
+Typical run from repository root after building AnchorWave:
 
 ```bash
-scripts/align_with_anchorwave.sh --gff path/to/reference.gff3 --threads 16
+scripts/align_with_anchorwave.sh \
+  --gff v5.gff3.gz \
+  --ref v5.fa.gz \
+  --query v2.fa.gz \
+  --threads 16 \
+  --outdir anchorwave_out
 ```
 
 ## Output
