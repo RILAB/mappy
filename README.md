@@ -42,6 +42,40 @@ Scripts:
 
 - `scripts/align_with_anchorwave.sh`
 
+## OGUT Marker Map Provenance
+
+The OGUT marker map in this repository traces back to the marker resource reported in:
+
+- Ogut F, Bian Y, Bradbury PJ, Holland JB. 2015. *Joint-multiple family linkage analysis predicts within-family variation better than single-family analysis of the maize nested association mapping population*. Heredity. [https://doi.org/10.1038/hdy.2014.123](https://doi.org/10.1038/hdy.2014.123)
+
+The original marker table was recorded here as `ogut_fifthcM_map_agpv2.csv`, then converted to BED format as `ogut_fifthcM_map_agpv2.bed`. The BED conversion uses chromosome, physical position, marker name, source SNP ID, and cM value, with 0-based half-open coordinates:
+
+```bash
+awk -F',' 'NR>1 { pos=$4+0; print $3 "\t" pos-1 "\t" pos "\t" $2 "\t" $1 "\t" $5 }' \
+  ogut_fifthcM_map_agpv2.csv > ogut_fifthcM_map_agpv2.bed
+```
+
+## Lift-Over to B73 v5
+
+To move marker coordinates from AGPv2 to B73 v5, we generated `v2v5.chain` from an alignment between the v2 and v5 maize genome assemblies using AnchorWave. After building the chain file, the marker BED was translated to v5 coordinates with CrossMap:
+
+```bash
+CrossMap bed v2v5.chain ogut_fifthcM_map_agpv2.bed ogut_v5.bed
+```
+
+This produced `ogut_v5.bed`, which contains the lifted marker positions on the v5 assembly while preserving the marker IDs and cM annotations.
+
+## Post-Lift Manual Marker Adjustments
+
+After inspecting `ogut_v5.bed`, we found markers whose physical coordinates were not monotonically increasing within chromosome even though the cM values remained monotonic. To keep the map order consistent with the physical order on v5, we adjusted the cM values for the affected markers without changing their lifted physical positions.
+
+Applied adjustments:
+
+- On `Chr3`, `M2179` and `M2180` kept their physical coordinates, but their cM values were swapped.
+- On `Chr7`, the block from `M5158` through `M5171` kept its physical coordinates, and the cM values across that block were reversed so that genetic order matches the physical order.
+
+The pre-edit `ogut_v5.bed` was committed as `ce1ab1f`, and a local backup copy was also written to `ogut_v5.bed.bak` before those edits.
+
 ## Requirements
 
 Run `module load minimap2` (or install `minimap2` so it is available on `PATH`).
