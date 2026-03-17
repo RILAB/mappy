@@ -57,7 +57,13 @@ awk -F',' 'NR>1 { pos=$4+0; print $3 "\t" pos-1 "\t" pos "\t" $2 "\t" $1 "\t" $5
 
 ## Lift-Over to B73 v5
 
-To move marker coordinates from AGPv2 to B73 v5, we generated `v2v5.chain` from an alignment between the v2 and v5 maize genome assemblies using AnchorWave. After building the chain file, the marker BED was translated to v5 coordinates with CrossMap:
+To move marker coordinates from AGPv2 to B73 v5, we aligned the v2 and v5 maize genome assemblies using AnchorWave, then converted the resulting MAF alignment into a UCSC chain file with [maf-convert](https://gitlab.com/mcfrith/last/-/blob/main/doc/maf-convert.rst):
+
+```bash
+maf-convert chain AW_out/alignment.maf > v2v5.chain
+```
+
+After building the chain file, the marker BED was translated to v5 coordinates with [CrossMap](https://github.com/liguowang/CrossMap):
 
 ```bash
 CrossMap bed v2v5.chain ogut_fifthcM_map_agpv2.bed ogut_v5.bed
@@ -78,7 +84,7 @@ The pre-edit `ogut_v5.bed` was committed as `ce1ab1f`, and a local backup copy w
 
 ## Requirements
 
-Run `module load minimap2` (or install `minimap2` so it is available on `PATH`).
+Run `module load last` and `module load minimap2` (or install both tools so they are available on `PATH`).
 
 ## Quick Start
 
