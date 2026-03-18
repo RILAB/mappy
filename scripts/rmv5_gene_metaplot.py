@@ -2,7 +2,8 @@
 """Plot strand-aware cM/Mb metaplots around gene starts and stops.
 
 This script uses a piecewise-constant recombination track from RMv5.bed and
-gene models from a GFF3 file. It produces two panels:
+gene models from a GFF3 file. It produces a single plot with two overlaid
+profiles:
 
 1. TSS-aligned metaplot: upstream flank and the first bases after the TSS.
 2. TTS-aligned metaplot: the last bases before the stop codon and the
@@ -194,8 +195,11 @@ def accumulate_panel(
     return centers, averages, counts, [bin_end - bin_start + 1 for bin_start, bin_end, _center in bins]
 
 
-def plot_panel(ax, centers, values, title, xlabel, window):
-    ax.plot(centers, values, color="#1f5a91", linewidth=1.8)
+def plot_series(ax, centers, values, label, color):
+    ax.plot(centers, values, color=color, linewidth=1.8, label=label)
+
+
+def style_plot(ax, title, xlabel, window, x_limits, tss_join, tts_join):
     ax.axvline(0, color="#333333", linewidth=0.8, alpha=0.8)
     ax.set_title(title, fontsize=13)
     ax.set_xlabel(xlabel)
@@ -203,9 +207,23 @@ def plot_panel(ax, centers, values, title, xlabel, window):
     ax.grid(color="#d9d9d9", linewidth=0.5, alpha=0.7)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.set_xlim(*x_limits)
     tick_step = max(window * 10, 500)
-    ticks = list(range(int(min(centers)), int(max(centers)) + tick_step, tick_step))
+    tick_start = int(math.floor(x_limits[0] / tick_step) * tick_step)
+    tick_end = int(math.ceil(x_limits[1] / tick_step) * tick_step)
+    ticks = list(range(tick_start, tick_end + tick_step, tick_step))
+    ticks = sorted(set(ticks + [tss_join, tts_join]))
+    labels = []
+    for tick in ticks:
+        if tick == tss_join:
+            labels.append("TSS")
+        elif tick == tts_join:
+            labels.append("TTS")
+        else:
+            labels.append(str(int(tick)))
     ax.set_xticks(ticks)
+    ax.set_xticklabels(labels)
+    ax.legend(frameon=False)
 
 
 def main() -> None:
@@ -240,29 +258,41 @@ def main() -> None:
         "tts",
     )
 
-    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharey=True)
-    plot_panel(
-        axes[0],
-        tss_centers,
+    tss_plot_centers = [center - args.tss_window for center in tss_centers]
+    tts_plot_centers = [center + args.tts_window for center in tts_centers]
+
+    fig, ax = plt.subplots(figsize=(12, 5.5))
+    plot_series(
+        ax,
+        tss_plot_centers,
         tss_values,
-        f"TSS metaplot: {args.upstream} bp upstream to {args.tss_window} bp after TSS",
-        "Position relative to TSS (bp)",
-        args.window_size,
+        f"TSS: {args.upstream} bp upstream to {args.tss_window} bp after TSS",
+        "#1f5a91",
     )
-    plot_panel(
-        axes[1],
-        tts_centers,
+    plot_series(
+        ax,
+        tts_plot_centers,
         tts_values,
-        f"TTS metaplot: {args.tts_window} bp before stop to {args.downstream} bp downstream",
-        "Position relative to TTS (bp)",
+        f"TTS: {args.tts_window} bp before stop to {args.downstream} bp downstream",
+        "#c45a1a",
+    )
+    x_min = tss_plot_centers[0] if tss_plot_centers else 0
+    x_max = tts_plot_centers[-1] if tts_plot_centers else 0
+    style_plot(
+        ax,
+        "Gene metaplot around TSS and TTS",
+        "Distance from gene boundary (center joins TSS and TTS windows)",
         args.window_size,
+        (x_min, x_max),
+        -args.tss_window,
+        args.tts_window,
     )
     fig.suptitle(
         f"RMv5 cM/Mb metaplot across {len(genes)} genes",
         fontsize=15,
         y=0.995,
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(out_path, dpi=250)
 
 
