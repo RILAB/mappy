@@ -22,6 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -39,6 +40,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--downstream", type=int, default=5000, help="TTS downstream flank in bp (default: 5000)")
     parser.add_argument("--tss-window", type=int, default=500, help="Bases after TSS to include (default: 500)")
     parser.add_argument("--tts-window", type=int, default=500, help="Bases before TTS to include (default: 500)")
+    parser.add_argument(
+        "--smooth",
+        action="store_true",
+        help="Fit a smooth spline to the 100 bp window averages separately for the left and right traces",
+    )
+    parser.add_argument(
+        "--smooth-factor",
+        type=float,
+        default=None,
+        help="Optional spline smoothing factor passed to SciPy (default: auto)",
+    )
     parser.add_argument(
         "--min-gene-length",
         type=int,
@@ -199,6 +211,30 @@ def plot_series(ax, centers, values, label, color):
     ax.plot(centers, values, color=color, linewidth=1.8, label=label)
 
 
+def smooth_series(
+    centers: list[float], values: list[float], smooth_factor: float | None
+) -> tuple[list[float], list[float]]:
+    finite_points = [(center, value) for center, value in zip(centers, values) if math.isfinite(value)]
+    if len(finite_points) < 4:
+        return centers, values
+
+    try:
+        from scipy.interpolate import UnivariateSpline
+    except Exception as exc:  # pragma: no cover - depends on local SciPy install
+        raise RuntimeError("--smooth requires a working SciPy install.") from exc
+
+    x_vals = np.array([center for center, _value in finite_points], dtype=float)
+    y_vals = np.array([value for _center, value in finite_points], dtype=float)
+    if smooth_factor is None:
+        variance = float(np.var(y_vals))
+        smooth_factor = len(x_vals) * variance
+
+    spline = UnivariateSpline(x_vals, y_vals, s=smooth_factor)
+    dense_x = np.linspace(x_vals[0], x_vals[-1], max(400, len(x_vals) * 10))
+    dense_y = spline(dense_x)
+    return dense_x.tolist(), dense_y.tolist()
+
+
 def style_plot(ax, title, xlabel, window, x_limits, tss_join, tts_join):
     ax.axvline(0, color="#333333", linewidth=0.8, alpha=0.8)
     ax.set_title(title, fontsize=13)
@@ -260,6 +296,13 @@ def main() -> None:
 
     tss_plot_centers = [center - args.tss_window for center in tss_centers]
     tts_plot_centers = [center + args.tts_window for center in tts_centers]
+    if args.smooth:
+        tss_plot_centers, tss_values = smooth_series(
+            tss_plot_centers, tss_values, args.smooth_factor
+        )
+        tts_plot_centers, tts_values = smooth_series(
+            tts_plot_centers, tts_values, args.smooth_factor
+        )
 
     fig, ax = plt.subplots(figsize=(12, 5.5))
     plot_series(
