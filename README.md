@@ -218,34 +218,42 @@ awk 'BEGIN{OFS="\t"}
 
 sort -k1,1V -k2,2n RMv5.events.tsv > RMv5.events.sorted.tsv
 
-awk 'BEGIN{OFS="\t"}
-NR==1{
-  chr=$1; pos=$2; delta=$3; next
+awk 'BEGIN{OFS="\t"; eps=1e-12}
+function clean(x) {
+  return (x < eps && x > -eps) ? 0 : x
+}
+NR==1 {
+  chr = $1
+  pos = $2
+  delta = $3 + 0
+  cur = 0
+  next
+}
+$1 == chr && $2 == pos {
+  delta += $3
+  next
 }
 {
-  if ($1!=chr || $2!=pos) {
-    dsum += delta
-    if (last_chr != "" && last_chr == chr && last_pos < pos && cur != 0) {
-      print chr, last_pos, pos-1, cur
-    }
-    if ($1 != chr) cur = 0
-    cur += dsum
-    last_chr = chr
-    last_pos = pos
-    chr = $1
-    pos = $2
-    delta = $3
-    dsum = 0
-  } else {
-    delta += $3
+  cur = clean(cur + delta)
+
+  if ($1 == chr && cur != 0 && pos < $2) {
+    print chr, pos, $2 - 1, cur
   }
+
+  if ($1 != chr) {
+    cur = 0
+  }
+
+  chr = $1
+  pos = $2
+  delta = $3 + 0
 }
 END{
-  dsum += delta
+  cur = clean(cur + delta)
 }' RMv5.events.sorted.tsv > RMv5_rates.bed
 ```
 
-The final file, `RMv5_rates.bed`, is a chromosome-wise interval track in which each region stores the summed crossover rate over all uniquely resolved Rodgers-Melnick intervals lifted to B73 v5.
+This sweep collapses all event deltas at the same position, applies the total change once, and then emits the constant-rate interval to the next event position. The final file, `RMv5_rates.bed`, is a chromosome-wise interval track in which each region stores the summed crossover rate over all uniquely resolved Rodgers-Melnick intervals lifted to B73 v5.
 
 ## Summarize Region CO and Chromosome cM Lengths
 
@@ -307,3 +315,5 @@ This final `RMv5.bed` contains:
 - summed Rodgers-Melnick crossover rate
 - chromosome-scaled cM assigned to the interval
 - `cM/Mb`
+
+Comparison of the Rodgers-Melnick and Ogut maps can be seen in `RMv5_vs_ogut_cumulative_by_chromosome.png` (scaled so cumulative value is the same).

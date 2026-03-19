@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--smooth",
         action="store_true",
-        help="Fit a smooth spline to the 100 bp window averages separately for the left and right traces",
+        help="Fit a smooth spline to all 100 bp windows separately for the left and right traces",
     )
     parser.add_argument(
         "--smooth-factor",
@@ -212,9 +212,16 @@ def plot_series(ax, centers, values, label, color):
 
 
 def smooth_series(
-    centers: list[float], values: list[float], smooth_factor: float | None
+    centers: list[float],
+    values: list[float],
+    counts: list[int],
+    smooth_factor: float | None,
 ) -> tuple[list[float], list[float]]:
-    finite_points = [(center, value) for center, value in zip(centers, values) if math.isfinite(value)]
+    finite_points = [
+        (center, value, count)
+        for center, value, count in zip(centers, values, counts)
+        if math.isfinite(value) and count > 0
+    ]
     if len(finite_points) < 4:
         return centers, values
 
@@ -223,13 +230,17 @@ def smooth_series(
     except Exception as exc:  # pragma: no cover - depends on local SciPy install
         raise RuntimeError("--smooth requires a working SciPy install.") from exc
 
-    x_vals = np.array([center for center, _value in finite_points], dtype=float)
-    y_vals = np.array([value for _center, value in finite_points], dtype=float)
+    x_vals = np.array([center for center, _value, _count in finite_points], dtype=float)
+    y_vals = np.array([value for _center, value, _count in finite_points], dtype=float)
+    count_vals = np.array([count for _center, _value, count in finite_points], dtype=float)
     if smooth_factor is None:
-        variance = float(np.var(y_vals))
-        smooth_factor = len(x_vals) * variance
+        weighted_mean = float(np.average(y_vals, weights=count_vals))
+        weighted_variance = float(np.average((y_vals - weighted_mean) ** 2, weights=count_vals))
+        smooth_factor = float(np.sum(count_vals) * weighted_variance)
 
-    spline = UnivariateSpline(x_vals, y_vals, s=smooth_factor)
+    # sqrt(count) makes the least-squares objective equivalent to fitting
+    # against every individual 100 bp window rather than just the per-bin mean.
+    spline = UnivariateSpline(x_vals, y_vals, w=np.sqrt(count_vals), s=smooth_factor)
     dense_x = np.linspace(x_vals[0], x_vals[-1], max(400, len(x_vals) * 10))
     dense_y = spline(dense_x)
     return dense_x.tolist(), dense_y.tolist()
@@ -298,10 +309,10 @@ def main() -> None:
     tts_plot_centers = [center + args.tts_window for center in tts_centers]
     if args.smooth:
         tss_plot_centers, tss_values = smooth_series(
-            tss_plot_centers, tss_values, args.smooth_factor
+            tss_plot_centers, tss_values, tss_counts, args.smooth_factor
         )
         tts_plot_centers, tts_values = smooth_series(
-            tts_plot_centers, tts_values, args.smooth_factor
+            tts_plot_centers, tts_values, tts_counts, args.smooth_factor
         )
 
     fig, ax = plt.subplots(figsize=(12, 5.5))
